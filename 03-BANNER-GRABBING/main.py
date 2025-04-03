@@ -1,20 +1,39 @@
 import socket
 import threading
 
+# Liste des requêtes spécifiques par défaut pour détecter les services
+SERVICE_QUERIES = {
+    21: b'USER anonymous\r\n',  # FTP
+    22: b'\n',  # SSH
+    25: b'HELO example.com\r\n',  # SMTP
+    80: b'HEAD / HTTP/1.1\r\nHost: example.com\r\n\r\n',  # HTTP
+    110: b'USER test\r\n',  # POP3
+    143: b'LOGIN test test\r\n',  # IMAP
+    443: b'HEAD / HTTP/1.1\r\nHost: example.com\r\n\r\n',  # HTTPS
+    3306: b'\n',  # MySQL
+    3389: b'\x03\x00\x00\x0b\x06\xd0\x00\x00\x12\x34\x00',  # RDP
+    5900: b'\n',  # VNC
+}
+
 
 def grab_banner(ip, port):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)
+            s.settimeout(2)  # Timeout plus long pour certains services lents
             if s.connect_ex((ip, port)) == 0:
                 try:
-                    s.sendall(b'HEAD / HTTP/1.1\r\n\r\n') if port in [80, 443] else None
-                    banner = s.recv(1024).decode().strip()
+                    # Envoie une requête spécifique si connue, sinon juste un ping vide
+                    request = SERVICE_QUERIES.get(port, b'\n')
+                    s.sendall(request)
+
+                    banner = s.recv(1024).decode(errors='ignore').strip()
                     if banner:
                         print(f"[+] Port {port} ouvert – Service détecté : {banner}")
+                    else:
+                        print(f"[+] Port {port} ouvert – Aucune réponse identifiable.")
                 except socket.error:
-                    pass
-    except Exception as e:
+                    print(f"[+] Port {port} ouvert – Impossible de récupérer la bannière.")
+    except Exception:
         pass
 
 
